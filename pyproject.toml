@@ -1,0 +1,15 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+lint.select = ["E", "F", "W"]
+lint.ignore = ["E712", "F405", "F403" ,"E722"]
+exclude = [".venv","migrations"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+skip = [".venv", "migrations"]
+
+[tool.black]
+line-length = 120
+target-version = ["py311"]
