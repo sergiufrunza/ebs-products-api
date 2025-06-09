@@ -1,7 +1,9 @@
+from django.db import transaction
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from .models import Category, Product
@@ -9,6 +11,7 @@ from .serializers import (
     AveragePriceByCategoryInputSerializer,
     AveragePriceByProductInputSerializer,
     CategorySerializer,
+    PriceForCategorySerializer,
     PriceSerializer,
     ProductSerializer,
 )
@@ -107,6 +110,21 @@ class PriceViewSet(viewsets.ViewSet):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @swagger_auto_schema(request_body=PriceForCategorySerializer, responses={201: PriceSerializer(many=True)})
+    @action(detail=False, methods=["post"], url_path="bulk-create-by-category", url_name="bulk-create-by-category")
+    @transaction.atomic
+    def bulk_create_by_category(self, request):
+        serializer = PriceForCategorySerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            prices = serializer.create_prices_for_category()
+            return Response(PriceSerializer(prices, many=True).data, status=status.HTTP_201_CREATED)
+        except ValidationError as e:
+            return Response({"detail": e.detail}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @swagger_auto_schema(
         method="get",

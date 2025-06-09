@@ -3,7 +3,9 @@ from decimal import Decimal
 
 from django.test import TestCase
 from django.urls import reverse
+from rest_framework import status
 from rest_framework.test import APITestCase
+
 from .models import Category, Price, Product
 from .utils.pricing import resolve_overlapping_prices
 
@@ -450,3 +452,49 @@ class AverageByProductTestCase(APITestCase):
             url, {"start_date": "2025-06-01", "end_date": "2025-06-30", "group_by": "daily"}  # invalid
         )
         self.assertEqual(response.status_code, 400)
+
+
+class BulkPriceCreateTestCase(APITestCase):
+    def setUp(self):
+        self.category = Category.objects.create(name="Electronics")
+        self.product1 = Product.objects.create(name="Phone", category=self.category, sku="PH1")
+        self.product2 = Product.objects.create(name="Tablet", category=self.category, sku="TB1")
+
+        self.url = reverse("price-bulk-create-by-category")  # depends on router config
+
+    def test_bulk_create_prices_success(self):
+        data = {"category_id": self.category.id, "price": "99.99", "start_date": "2025-06-10", "end_date": "2025-12-31"}
+
+        response = self.client.post(self.url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(response.data), 2)
+
+        prices = Price.objects.filter(product__category=self.category)
+        self.assertEqual(prices.count(), 2)
+        for price in prices:
+            self.assertEqual(price.price, Decimal("99.99"))
+            self.assertEqual(str(price.start_date), "2025-06-10")
+
+    def test_category_does_not_exist(self):
+        data = {"category_id": 999, "price": "50.00", "start_date": "2025-06-10", "end_date": "2025-12-31"}
+        response = self.client.post(self.url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("category_id", response.data)
+
+    def test_start_date_after_end_date(self):
+        data = {"category_id": self.category.id, "price": "25.00", "start_date": "2025-12-31", "end_date": "2025-06-01"}
+        response = self.client.post(self.url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("start_date", response.data)
+
+    def test_no_products_in_category(self):
+        empty_category = Category.objects.create(name="EmptyCat")
+        data = {
+            "category_id": empty_category.id,
+            "price": "10.00",
+            "start_date": "2025-06-10",
+            "end_date": "2025-07-01",
+        }
+        response = self.client.post(self.url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("category", response.data["detail"])

@@ -3,7 +3,7 @@ import string
 from datetime import date, timedelta
 from decimal import Decimal
 
-from products.models import Category, Product, Price
+from products.models import Category, Price, Product
 
 Category.objects.all().delete()
 Product.objects.all().delete()
